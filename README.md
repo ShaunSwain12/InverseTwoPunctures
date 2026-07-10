@@ -7,9 +7,10 @@ To speed up this process, we start with low quality settings until a weaker tole
 
 ## Dependencies
 
-The workflow drives the [`twopunctures-standalone`](twopunctures-standalone/) solver
-(a Cactus-free copy of the Einstein Toolkit TwoPunctures thorn) from a shell
-script. You need:
+The workflow drives the [`twopunctures-standalone`](https://bitbucket.org/relastro/twopunctures-standalone/src/master/)
+solver (a Cactus-free copy of the Einstein Toolkit TwoPunctures thorn) from a
+shell script. Clone and build it separately; below `<path-to-twopunctures-standalone>`
+is wherever you checked it out. You need:
 
 | Dependency | Purpose | macOS | Linux / HPC |
 | --- | --- | --- | --- |
@@ -35,7 +36,7 @@ Notes:
 ## Building the solver
 
 ```sh
-cd twopunctures-standalone/cpp-standalone
+cd <path-to-twopunctures-standalone>/cpp-standalone
 make            # builds ../libtwopunctures/libtwopunctures.a and ./twopunctures
 ```
 
@@ -56,7 +57,7 @@ reported ADM mass matches the target (coarse resolution first, then production).
 
 ```sh
 # Local: run the solver directly in this process (foreground).
-./submit.sh --mode local --exe twopunctures-standalone/cpp-standalone/twopunctures \
+./submit.sh --mode local --exe <path-to-twopunctures-standalone>/cpp-standalone/twopunctures \
     params.par 1.0
 
 # Slurm: each iteration is submitted with sbatch submit_single_job.sh; the
@@ -79,7 +80,7 @@ max iterations, email notifications, `--dry-run`, ...).
 
 [`params.par`](params.par) uses the standalone solver's native parameter names
 (the fields of `TP::Parameters` in
-[`twopunctures-standalone/libtwopunctures/TP_Parameters.h`](twopunctures-standalone/libtwopunctures/TP_Parameters.h)),
+[`libtwopunctures/TP_Parameters.h`](https://bitbucket.org/relastro/twopunctures-standalone/src/master/libtwopunctures/TP_Parameters.h)),
 one `name = value` per line, `#` for comments. Key parameters:
 
 * `target_M_plus` / `target_M_minus` — target ADM masses (with

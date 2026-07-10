@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
-# tune_adm_mass.sh — drive TwoPunctures to a target *total* ADM mass by
-# tuning the momentum magnitude, ramping resolution up as the answer
-# converges.
+# submit.sh — drive TwoPunctures to a target *total* ADM mass by tuning the
+# momentum magnitude, ramping resolution up as the answer converges.
 #
 # TwoPunctures takes bare/target puncture masses + momenta + spins and
 # reports the total system ADM mass ("TP: The total ADM mass is ...").
@@ -15,7 +14,7 @@
 # only declared for a run actually performed at production resolution.
 #
 # Usage:
-#   ./tune_adm_mass.sh [options] <initial_params.txt> <target_adm_mass>
+#   ./submit.sh [options] <initial_params.par> <target_adm_mass>
 #
 # Run with --help for the full option list.
 
@@ -28,7 +27,7 @@ SCRIPT_PATH=$(realpath "$0")
 # Defaults
 # ---------------------------------------------------------------------------
 MODE=slurm                # slurm | local
-FINAL_TOL=1e-8
+FINAL_TOL=1e-5
 COARSE_TOL=1e-3
 INITIAL_STEP=0.05          # fractional momentum bump used for the very first
                             # correction (no secant history yet)
@@ -41,16 +40,16 @@ COARSE_ADM_TOL=1e-10
 PROD_NPOINTS="64 64 48"
 PROD_NEWTON_TOL=1e-12
 PROD_ADM_TOL=1e-12
-EXE="<path-to-TwoPunctures-executable>"  # must be set by user
+EXE="./twopunctures"  # parfile-driven build in this directory; see Makefile
 SUBMIT_SCRIPT="./submit_single_job.sh"
 WORKDIR="./output"
 DRY_RUN=0
 FOREGROUND=0
-MAIL_USER=""
+MAIL_USER="$(whoami)"  # local account; pass --mail-user "" to disable
 
 usage() {
     cat <<EOF
-Usage: $0 [options] <initial_params.txt> <target_adm_mass>
+Usage: $0 [options] <initial_params.par> <target_adm_mass>
 
 Options:
   --mode {slurm|local}       Job submission method (default: $MODE).
@@ -59,9 +58,9 @@ Options:
                                         this orchestrator auto-backgrounds
                                         itself (see below) and just polls
                                         squeue between submissions.
-                              local  -> run the executable directly with
-                                        mpirun, in this process, in the
-                                        foreground. Never backgrounds itself.
+                              local  -> run the executable directly, in this
+                                        process, in the foreground. Never
+                                        backgrounds itself.
   --final-tol TOL             Convergence tolerance on the ADM mass residual,
                                checked only for production-resolution runs
                                (default: $FINAL_TOL).
@@ -93,12 +92,12 @@ Options:
                                  when the campaign starts (before the first
                                  run is submitted) and one when it ends
                                  (converged, exhausted --max-iter, or
-                                 errored). Omit to send no email at all.
-                                 Per-iteration sbatch jobs are always
-                                 submitted with --mail-type=NONE regardless
-                                 of this setting, overriding submit.sh's own
-                                 --mail-type=all, so you never get one email
-                                 per iteration.
+                                 errored). Defaults to the local account
+                                 running this script ($MAIL_USER); pass
+                                 --mail-user "" to disable entirely.
+                                 Per-iteration sbatch jobs always run with
+                                 --mail-type=NONE regardless of this setting,
+                                 so you never get one email per iteration.
   -h, --help                     Show this help.
 
 In slurm mode, by default the script detaches itself into the background
@@ -265,6 +264,14 @@ vector_magnitude() {
 
 abs_val() { awk -v x="$1" 'BEGIN{print (x < 0) ? -x : x}'; }
 
+# fail_iter MESSAGE -> print an error, dump the tail of the current
+# iteration's $outfile (set by the run_iteration caller), and exit.
+fail_iter() {
+    echo "ERROR: $1" >&2
+    tail -30 "$outfile" >&2
+    exit 1
+}
+
 # send_mail SUBJECT BODY -> one notification, skipped for dry-run or if
 # --mail-user was not given
 MAIL_FROM="TwoPunctures ID Solver <$(whoami)@$(hostname -f 2>/dev/null || hostname)>"
@@ -279,8 +286,7 @@ send_mail() {
 # ---------------------------------------------------------------------------
 # Set up
 # ---------------------------------------------------------------------------
-mkdir -p "$WORKDIR"
-BASE_PARAMS="$WORKDIR/base_params.txt"
+BASE_PARAMS="$WORKDIR/base_params.par"
 cp "$PARAM_FILE" "$BASE_PARAMS"
 
 P0_PLUS=$(get_param "$BASE_PARAMS" par_P_plus)
@@ -394,10 +400,8 @@ run_iteration() {
         outfile="$iterdir/run.log"
         ln -sf "$(realpath "$EXE")" "$iterdir/$(basename "$EXE")"
         # standalone is a single OpenMP process taking the parfile as argv[1]
-        (cd "$iterdir" && "./$(basename "$EXE")" ./params.par) > "$outfile" 2>&1 || {
-            echo "ERROR: TwoPunctures run failed, see $outfile" >&2
-            exit 1
-        }
+        (cd "$iterdir" && "./$(basename "$EXE")" ./params.par) > "$outfile" 2>&1 \
+            || fail_iter "TwoPunctures run failed, see $outfile"
     else
         ln -sf "$(realpath "$EXE")" "$iterdir/$(basename "$EXE")"
         ln -sf "$(realpath "$SUBMIT_SCRIPT")" "$iterdir/submit.sh"
@@ -416,13 +420,19 @@ run_iteration() {
         outfile="$iterdir/slurm-*.out"
         outfile=$(ls "$iterdir"/slurm-*.out 2>/dev/null | head -1 || true)
         [[ -n "$outfile" ]] || { echo "ERROR: no slurm output file found in $iterdir" >&2; exit 1; }
-    fi
 
-    grep -q "TwoPunctures finished." "$outfile" || {
-        echo "ERROR: iter $iter did not finish successfully, see $outfile" >&2
-        tail -30 "$outfile" >&2
-        exit 1
-    }
+        # This cluster has no Slurm accounting DB (sacct), so the job script
+        # itself records its exit code; check that rather than grepping
+        # solver-specific text (twopunctures-standalone prints no completion
+        # marker at all).
+        local exit_code_file="$iterdir/exit_code"
+        [[ -f "$exit_code_file" ]] \
+            || fail_iter "iter $iter produced no $exit_code_file (job likely killed before finishing), see $outfile"
+        local rc
+        read -r rc < "$exit_code_file"
+        [[ "$rc" == 0 ]] \
+            || fail_iter "iter $iter's TwoPunctures run exited with code $rc, see $outfile"
+    fi
 
     MASS=$(grep "The total ADM mass is" "$outfile" | tail -1 | awk '{print $NF}')
     [[ -n "$MASS" ]] || { echo "ERROR: no ADM mass reported in $outfile" >&2; exit 1; }

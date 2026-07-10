@@ -1,5 +1,5 @@
-# Parameter file for the TwoPunctures-Standalone code (cpp-standalone/twopunctures).
-# Parameter names match the fields of TP::Parameters (see
+# Parameter file for this repo's parfile-driven twopunctures build (Main.cc +
+# Makefile). Parameter names match the fields of TP::Parameters (see
 # twopunctures-standalone/libtwopunctures/TP_Parameters.h). Syntax is
 # "name = value", one per line; '#' starts a comment.
 
@@ -50,10 +50,6 @@ TP_epsilon   = 1e-12
 # Initial data params
 initial_lapse = psi^n
 initial_lapse_psi_exponent = -2.0
-
-# Set false to skip the demo field-value interpolation dump (only the ADM
-# mass is needed when tuning); true reproduces the example output.
-output_field_values = true
 
 # Debug output
 #do_residuum_debug_output = false

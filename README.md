@@ -5,12 +5,18 @@ Find the ADM momenta for a given set of BH spins, separation, mass ratio and ADM
 Starting from an initial guess of the ADM momenta, the TwoPunctures code is run iteratively, correcting the ADM momenta for each run until a tolerance is met.
 To speed up this process, we start with low quality settings until a weaker tolerance is met, and then we transition to production settings to determine the final answer.
 
-## Dependencies
+## How it solves
 
-The workflow drives the [`twopunctures-standalone`](https://bitbucket.org/relastro/twopunctures-standalone/src/master/)
-solver (a Cactus-free copy of the Einstein Toolkit TwoPunctures thorn) from a
-shell script. Clone and build it separately; below `<path-to-twopunctures-standalone>`
-is wherever you checked it out. You need:
+The upstream [`twopunctures-standalone`](https://bitbucket.org/relastro/twopunctures-standalone/src/master/)
+solver (a Cactus-free copy of the Einstein Toolkit TwoPunctures thorn) is a
+library (`libtwopunctures.a`) plus a demo `cpp-standalone/Main.cc` that
+**hardcodes every parameter and ignores its command-line argument** — there is
+no parameter-file parser upstream. [`Main.cc`](Main.cc) in *this* repo is a
+small, separate driver that links against that pristine, unmodified library
+and adds a real `key = value` parser, so the momentum can actually be varied
+between iterations. It does not touch or fork the upstream clone.
+
+## Dependencies
 
 | Dependency | Purpose | macOS | Linux / HPC |
 | --- | --- | --- | --- |
@@ -20,34 +26,33 @@ is wherever you checked it out. You need:
 | **OpenMP** *(optional, for a parallel solve)* | speeds up the solve | `brew install libomp` | built into GCC (`-fopenmp`) |
 | Bash | run the driver `submit.sh` | 3.2 (system) is enough | any |
 | Slurm (`sbatch`, `squeue`, `scancel`) | only for `--mode slurm` | — | provided by the cluster |
-| `mail` | only for `--mail-user` email notifications | optional | optional |
+| `mail` | email notifications (on by default; see [Running](#running)) | optional | optional |
 
 Notes:
 
-* **OpenMP is optional.** The solver only uses `#pragma omp` (no `omp.h`/`omp_*`
-  calls), so without OpenMP it builds and runs correctly, just serially. On
-  macOS the build auto-detects Homebrew `libomp`; if it is absent it falls back
-  to a serial build. Force serial anywhere with `make OMP=`.
-* **`mpirun` is not needed.** The standalone solver is a single shared-memory
-  (OpenMP) process; set the thread count with `OMP_NUM_THREADS`.
+* **`mpirun` is not needed.** The solver is a single shared-memory (OpenMP)
+  process; set the thread count with `OMP_NUM_THREADS`.
 * The GSL shared libraries must also be found at **run time** (on HPC, keep the
   same `module load gsl` in your job environment).
 
 ## Building the solver
 
 ```sh
-cd <path-to-twopunctures-standalone>/cpp-standalone
-make            # builds ../libtwopunctures/libtwopunctures.a and ./twopunctures
+make            # builds ./twopunctures from Main.cc, linked against
+                # $TP_STANDALONE_DIR/libtwopunctures/libtwopunctures.a
+                # (built automatically if missing)
 ```
 
-The Makefiles find GSL via `gsl-config` and pick a working OpenMP flag for the
-platform automatically, so a plain `make` works on both macOS and Linux. Useful
-overrides:
+`TP_STANDALONE_DIR` defaults to `/scratch/sswain/twopunctures-standalone`;
+override it if your clone lives elsewhere:
 
 ```sh
-make OMP=                 # force a serial build (e.g. macOS without libomp)
-make OMP=-fopenmp         # force GCC-style OpenMP
+make TP_STANDALONE_DIR=<path-to-twopunctures-standalone>
 ```
+
+The Makefile never builds, cleans, or otherwise modifies anything under
+`TP_STANDALONE_DIR` beyond invoking its own Makefile to produce the `.a` if
+needed.
 
 ## Running
 
@@ -56,30 +61,46 @@ target total ADM mass, scales the momentum magnitude, and root-finds until the
 reported ADM mass matches the target (coarse resolution first, then production).
 
 ```sh
-# Local: run the solver directly in this process (foreground).
-./submit.sh --mode local --exe <path-to-twopunctures-standalone>/cpp-standalone/twopunctures \
-    params.par 1.0
+# Local: run the solver directly in this process, in the foreground.
+./submit.sh --mode local params.par 1.0
 
 # Slurm: each iteration is submitted with sbatch submit_single_job.sh; the
-# driver auto-detaches and polls squeue between runs.
-./submit.sh --mode slurm --exe ./twopunctures params.par 1.0
+# driver auto-detaches into the background and polls squeue between runs, so
+# it's safe to log out once it's started.
+./submit.sh --mode slurm params.par 1.0
 ```
 
 Run `./submit.sh --help` for the full option list (tolerances, resolutions,
-max iterations, email notifications, `--dry-run`, ...).
+max iterations, `--dry-run`, ...). A few things worth knowing:
 
+* **Email notifications are on by default**, sent to the account running the
+  script: one when the campaign starts, one when it ends (converged,
+  exhausted `--max-iter`, or errored). Pass `--mail-user someone@example.com`
+  to redirect them, or `--mail-user ""` to disable. Per-iteration Slurm jobs
+  never send mail themselves (`--mail-type=NONE`), so you only ever get the
+  two campaign-level emails, not one per iteration.
+* **Slurm mode auto-backgrounds itself** (`setsid` + `nohup`) so a plain
+  invocation survives logout; pass `--foreground` to stay attached instead
+  (e.g. inside `tmux`). **Local mode always stays attached** — it's running
+  the solve itself, right here.
+* This cluster has no Slurm accounting DB (`sacct` is disabled), so success
+  is detected via an `exit_code` file [`submit_single_job.sh`](submit_single_job.sh)
+  writes after each run, not by grepping solver output for a completion
+  marker (the solver doesn't print one).
 * In **slurm mode** the driver symlinks the built `twopunctures` binary and
-  [`submit_single_job.sh`](submit_single_job.sh) into each per-iteration
-  directory and submits the job. For a parallel solve on the cluster, raise
-  `--cpus-per-task` in `submit_single_job.sh` (it exports
-  `OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK`).
+  `submit_single_job.sh` into each per-iteration directory and submits the
+  job. For a parallel solve on the cluster, raise `--cpus-per-task` in
+  `submit_single_job.sh` (it exports `OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK`).
 * In **local mode** it runs `./twopunctures` directly; set `OMP_NUM_THREADS`
   yourself to control threading.
+* All progress (both modes) is appended to `<workdir>/progress.log`
+  (`tail -f` it); the converged parameter file is written to
+  `<workdir>/final_params.par`.
 
 ## Parameter file
 
-[`params.par`](params.par) uses the standalone solver's native parameter names
-(the fields of `TP::Parameters` in
+[`params.par`](params.par) uses the solver's native parameter names (the
+fields of `TP::Parameters` in
 [`libtwopunctures/TP_Parameters.h`](https://bitbucket.org/relastro/twopunctures-standalone/src/master/libtwopunctures/TP_Parameters.h)),
 one `name = value` per line, `#` for comments. Key parameters:
 
@@ -94,5 +115,7 @@ one `name = value` per line, `#` for comments. Key parameters:
   (along `z` instead if `swap_xz = true`).
 * `npoints_A/B/phi`, `Newton_tol`, `Newton_maxit`, `adm_tol` — spectral
   resolution and solver tolerances (`npoints_phi` must be a multiple of 4).
-* `output_field_values` — set `false` to skip the demo field-value dump when you
-  only need the ADM mass.
+
+See [`Main.cc`](Main.cc)'s `read_params_file()` for the complete, authoritative
+list of recognized keys; an unrecognized key prints a warning and is ignored
+rather than failing the run.

@@ -1,4 +1,4 @@
-# InverseTwoPunctures
+#  InverseTwoPunctures
 
 Find the ADM momenta for a given set of BH spins, separation, mass ratio and ADM mass.
 

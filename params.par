@@ -1,0 +1,60 @@
+# Parameter file for the TwoPunctures-Standalone code (cpp-standalone/twopunctures).
+# Parameter names match the fields of TP::Parameters (see
+# twopunctures-standalone/libtwopunctures/TP_Parameters.h). Syntax is
+# "name = value", one per line; '#' starts a comment.
+
+verbose = true
+
+### Two Punctures params
+
+# Main BH params.
+# give_bare_mass = false  -> par_m_plus/minus are solved for to hit the target
+#                            ADM masses below (equivalent to the old thorn's
+#                            TP_calculate_target_masses = true).
+# give_bare_mass = true   -> set par_m_plus/par_m_minus as bare masses instead.
+give_bare_mass = false
+target_M_plus  = 0.66666666
+target_M_minus = 0.33333333
+adm_tol        = 1e-12
+#par_m_plus  = 0.9773790195003562
+#par_m_minus = 0.4758625198306865
+
+# Puncture placement. The standalone places the "plus" puncture at
+# x = center_offset_x + par_b and the "minus" puncture at
+# x = center_offset_x - par_b (or along z if swap_xz = true). The old thorn's
+# TP_offset_plus = 33.333333 / TP_offset_minus = -66.66666 correspond to:
+par_b          = 49.9999965
+center_offset_x = -16.6666635
+center_offset_y = 0.0
+center_offset_z = 0.0
+#swap_xz = false
+
+# Linear momenta (single-line vector form: x y z)
+par_P_plus  = 0.0 -0.1 0.0
+par_P_minus = 0.0  0.1 0.0
+
+# Spins
+par_S_plus  = 0.0 0.125 0.0
+par_S_minus = 0.0 0.0   0.0
+
+# Solver params
+npoints_A    = 64
+npoints_B    = 64
+npoints_phi  = 48
+Newton_tol   = 1e-12
+Newton_maxit = 200
+TP_epsilon   = 1e-12
+#TP_Tiny = 0.0
+#TP_Extend_Radius = 0.0
+
+# Initial data params
+initial_lapse = psi^n
+initial_lapse_psi_exponent = -2.0
+
+# Set false to skip the demo field-value interpolation dump (only the ADM
+# mass is needed when tuning); true reproduces the example output.
+output_field_values = true
+
+# Debug output
+#do_residuum_debug_output = false
+#do_initial_debug_output = false

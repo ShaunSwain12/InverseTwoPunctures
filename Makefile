@@ -10,9 +10,19 @@ LIB := $(TP_STANDALONE_DIR)/libtwopunctures/libtwopunctures.a
 INC := -I$(TP_STANDALONE_DIR)/libtwopunctures
 
 CXX ?= g++
-LIBS := -lgsl -lgslcblas -lm
-
 binary := twopunctures
+
+# GSL flags via gsl-config (ships with GSL itself, so this finds it wherever
+# it's actually installed — Homebrew's lib/ dir in particular is often not
+# on the default linker search path on macOS even when its include/ dir is,
+# which is what a bare -lgsl runs into). Falls back to a bare link if
+# gsl-config isn't on PATH at all.
+GSL_CFLAGS := $(shell gsl-config --cflags 2>/dev/null)
+GSL_LIBS := $(shell gsl-config --libs 2>/dev/null)
+ifeq ($(GSL_LIBS),)
+    GSL_LIBS := -lgsl -lgslcblas -lm
+    $(warning gsl-config not found on PATH; linking with bare -lgsl -lgslcblas -lm, which may not find Homebrew's GSL on macOS)
+endif
 
 # OpenMP flags. On Linux/GCC, plain -fopenmp works. On macOS, CXX=g++ is
 # really Apple clang, which rejects -fopenmp outright; if Homebrew's libomp
@@ -35,7 +45,7 @@ else
     OMP_LIBS :=
 endif
 
-CXXFLAGS := -std=c++11 -O2 $(OMP)
+CXXFLAGS := -std=c++11 -O2 $(OMP) $(GSL_CFLAGS)
 LDFLAGS := $(OMP)
 
 .PHONY: all clean
@@ -49,7 +59,7 @@ Main.o: Main.cc
 	$(CXX) $(CXXFLAGS) $(INC) -c Main.cc -o Main.o
 
 $(binary): Main.o $(LIB)
-	$(CXX) $(LDFLAGS) -o $(binary) Main.o $(LIB) $(OMP_LIBS) $(LIBS)
+	$(CXX) $(LDFLAGS) -o $(binary) Main.o $(LIB) $(OMP_LIBS) $(GSL_LIBS)
 
 clean:
 	rm -f Main.o $(binary)

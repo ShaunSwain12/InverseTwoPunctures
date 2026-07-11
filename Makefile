@@ -5,7 +5,10 @@
 # from the command line, not by editing that Makefile) to produce the .a
 # if it's missing.
 
-TP_STANDALONE_DIR ?= /scratch/sswain/twopunctures-standalone
+# Defaults to a sibling directory of this repo (matches install_deps.sh's
+# default clone location); override for any other layout.
+MAKEFILE_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+TP_STANDALONE_DIR ?= $(MAKEFILE_DIR)/../twopunctures-standalone
 LIB := $(TP_STANDALONE_DIR)/libtwopunctures/libtwopunctures.a
 INC := -I$(TP_STANDALONE_DIR)/libtwopunctures
 

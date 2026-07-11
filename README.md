@@ -38,13 +38,32 @@ Notes:
 ## Building the solver
 
 ```sh
+./install_deps.sh
+```
+
+On macOS this installs GSL/OpenMP via Homebrew (prompting to install the
+Xcode Command Line Tools first if needed) and checks for a compiler and
+`make`. On Linux it only *checks* for these (HPC clusters normally provide
+them system-wide or via `module load`, and login nodes usually have no
+`sudo`) — if something's missing and `apt-get`+`sudo` are both available it
+offers to install them, otherwise it tells you what's missing so you can ask
+your sysadmin / load the right module. Either way, it then clones
+[`twopunctures-standalone`](https://bitbucket.org/relastro/twopunctures-standalone/src/master/)
+into a sibling directory (if not already present somewhere) and builds
+`./twopunctures`. Safe to re-run any time — every step is a no-op if already
+satisfied. See `./install_deps.sh --help` for options (`--tp-dir`,
+`--no-clone`, `--no-build`).
+
+To build by hand instead:
+
+```sh
 make            # builds ./twopunctures from Main.cc, linked against
                 # $TP_STANDALONE_DIR/libtwopunctures/libtwopunctures.a
                 # (built automatically if missing)
 ```
 
-`TP_STANDALONE_DIR` defaults to `/scratch/sswain/twopunctures-standalone`;
-override it if your clone lives elsewhere:
+`TP_STANDALONE_DIR` defaults to a sibling directory of this repo
+(`../twopunctures-standalone`); override it if your clone lives elsewhere:
 
 ```sh
 make TP_STANDALONE_DIR=<path-to-twopunctures-standalone>

@@ -276,11 +276,27 @@ fail_iter() {
 # --mail-user was not given
 MAIL_FROM="TwoPunctures ID Solver <$(whoami)@$(hostname -f 2>/dev/null || hostname)>"
 
+# Not every mail(1) supports -a (custom headers, used below to set a
+# friendly From). GNU mailutils / Debian bsd-mailx (typical on Linux) do;
+# macOS's built-in BSD mailx does not ("illegal option -- a") and there's
+# no portable way to ask in advance, so probe once: `mail -a` with no
+# argument errors out immediately either way (missing option-argument if
+# supported, illegal option if not) without ever sending anything.
+MAIL_SUPPORTS_FROM=1
+if mail -a 2>&1 </dev/null | grep -q "illegal option"; then
+    MAIL_SUPPORTS_FROM=0
+fi
+
 send_mail() {
     local subject=$1 body=$2
     [[ "$DRY_RUN" != 1 && -n "$MAIL_USER" ]] || return 0
-    printf '%s\n' "$body" | mail -a "From: $MAIL_FROM" -s "$subject" "$MAIL_USER" \
-        || echo "WARNING: failed to send notification email to $MAIL_USER" >&2
+    if [[ "$MAIL_SUPPORTS_FROM" == 1 ]]; then
+        printf '%s\n' "$body" | mail -a "From: $MAIL_FROM" -s "$subject" "$MAIL_USER" \
+            || echo "WARNING: failed to send notification email to $MAIL_USER" >&2
+    else
+        printf '%s\n' "$body" | mail -s "$subject" "$MAIL_USER" \
+            || echo "WARNING: failed to send notification email to $MAIL_USER" >&2
+    fi
 }
 
 # ---------------------------------------------------------------------------

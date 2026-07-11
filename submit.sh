@@ -278,12 +278,12 @@ MAIL_FROM="TwoPunctures ID Solver <$(whoami)@$(hostname -f 2>/dev/null || hostna
 
 # Not every mail(1) supports -a (custom headers, used below to set a
 # friendly From). GNU mailutils / Debian bsd-mailx (typical on Linux) do;
-# macOS's built-in BSD mailx does not ("illegal option -- a") and there's
-# no portable way to ask in advance, so probe once: `mail -a` with no
-# argument errors out immediately either way (missing option-argument if
-# supported, illegal option if not) without ever sending anything.
+# macOS's built-in BSD mailx never has. Runtime probing turned out to be
+# fragile (a bare `mail -a` with no other arguments hits a different, less
+# specific "too few arguments" code path than the real call, instead of the
+# "illegal option" one), so just check the OS directly instead.
 MAIL_SUPPORTS_FROM=1
-if mail -a 2>&1 </dev/null | grep -q "illegal option"; then
+if [[ "$(uname -s)" == Darwin ]]; then
     MAIL_SUPPORTS_FROM=0
 fi
 

@@ -26,7 +26,6 @@ between iterations. It does not touch or fork the upstream clone.
 | **OpenMP** *(optional, for a parallel solve)* | speeds up the solve | `brew install libomp` | built into GCC (`-fopenmp`) |
 | Bash | run the driver `submit.sh` | 3.2 (system) is enough | any |
 | Slurm (`sbatch`, `squeue`, `scancel`) | only for `--mode slurm` | — | provided by the cluster |
-| `mail` | email notifications (on by default; see [Running](#running)) | optional | optional |
 
 Notes:
 
@@ -92,12 +91,6 @@ reported ADM mass matches the target (coarse resolution first, then production).
 Run `./submit.sh --help` for the full option list (tolerances, resolutions,
 max iterations, `--dry-run`, ...). A few things worth knowing:
 
-* **Email notifications are on by default**, sent to the account running the
-  script: one when the campaign starts, one when it ends (converged,
-  exhausted `--max-iter`, or errored). Pass `--mail-user someone@example.com`
-  to redirect them, or `--mail-user ""` to disable. Per-iteration Slurm jobs
-  never send mail themselves (`--mail-type=NONE`), so you only ever get the
-  two campaign-level emails, not one per iteration.
 * **Slurm mode auto-backgrounds itself** (`setsid` + `nohup`) so a plain
   invocation survives logout; pass `--foreground` to stay attached instead
   (e.g. inside `tmux`). **Local mode always stays attached** — it's running

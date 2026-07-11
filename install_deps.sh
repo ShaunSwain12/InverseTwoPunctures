@@ -101,8 +101,6 @@ else
     warn "Unrecognized platform '$UNAME_S'; skipping package checks. You need a C++ compiler, make, and GSL (gsl-config on PATH)."
 fi
 
-have mail || warn "'mail' not found — submit.sh's email notifications (--mail-user) will silently fail to send; everything else still works."
-
 # ---------------------------------------------------------------------------
 # twopunctures-standalone (the solver library this repo's Main.cc links against)
 # ---------------------------------------------------------------------------

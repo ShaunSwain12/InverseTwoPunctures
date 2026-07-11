@@ -45,7 +45,6 @@ SUBMIT_SCRIPT="./submit_single_job.sh"
 WORKDIR="./output"
 DRY_RUN=0
 FOREGROUND=0
-MAIL_USER="$(whoami)"  # local account; pass --mail-user "" to disable
 
 usage() {
     cat <<EOF
@@ -88,16 +87,6 @@ Options:
                                  terminal instead of auto-backgrounding (see
                                  below). No effect in local mode, which is
                                  always attached. Implied by --dry-run.
-  --mail-user ADDRESS            Send exactly two notification emails: one
-                                 when the campaign starts (before the first
-                                 run is submitted) and one when it ends
-                                 (converged, exhausted --max-iter, or
-                                 errored). Defaults to the local account
-                                 running this script ($MAIL_USER); pass
-                                 --mail-user "" to disable entirely.
-                                 Per-iteration sbatch jobs always run with
-                                 --mail-type=NONE regardless of this setting,
-                                 so you never get one email per iteration.
   -h, --help                     Show this help.
 
 In slurm mode, by default the script detaches itself into the background
@@ -137,7 +126,6 @@ while [[ $# -gt 0 ]]; do
         --workdir) WORKDIR=$2; shift 2 ;;
         --dry-run) DRY_RUN=1; shift ;;
         --foreground) FOREGROUND=1; shift ;;
-        --mail-user) MAIL_USER=$2; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         --) shift; POSITIONAL+=("$@"); break ;;
         -*) echo "Unknown option: $1" >&2; usage; exit 1 ;;
@@ -272,33 +260,6 @@ fail_iter() {
     exit 1
 }
 
-# send_mail SUBJECT BODY -> one notification, skipped for dry-run or if
-# --mail-user was not given
-MAIL_FROM="TwoPunctures ID Solver <$(whoami)@$(hostname -f 2>/dev/null || hostname)>"
-
-# Not every mail(1) supports -a (custom headers, used below to set a
-# friendly From). GNU mailutils / Debian bsd-mailx (typical on Linux) do;
-# macOS's built-in BSD mailx never has. Runtime probing turned out to be
-# fragile (a bare `mail -a` with no other arguments hits a different, less
-# specific "too few arguments" code path than the real call, instead of the
-# "illegal option" one), so just check the OS directly instead.
-MAIL_SUPPORTS_FROM=1
-if [[ "$(uname -s)" == Darwin ]]; then
-    MAIL_SUPPORTS_FROM=0
-fi
-
-send_mail() {
-    local subject=$1 body=$2
-    [[ "$DRY_RUN" != 1 && -n "$MAIL_USER" ]] || return 0
-    if [[ "$MAIL_SUPPORTS_FROM" == 1 ]]; then
-        printf '%s\n' "$body" | mail -a "From: $MAIL_FROM" -s "$subject" "$MAIL_USER" \
-            || echo "WARNING: failed to send notification email to $MAIL_USER" >&2
-    else
-        printf '%s\n' "$body" | mail -s "$subject" "$MAIL_USER" \
-            || echo "WARNING: failed to send notification email to $MAIL_USER" >&2
-    fi
-}
-
 # ---------------------------------------------------------------------------
 # Set up
 # ---------------------------------------------------------------------------
@@ -334,28 +295,12 @@ converged=0
 
 # on_exit runs exactly once no matter how the script terminates (normal
 # completion, --max-iter exhausted, a hard error inside run_iteration, or a
-# signal via on_signal below) so exactly one "campaign finished" email goes
-# out, however things ended.
+# signal via on_signal below); in slurm mode it cancels any still-running job.
 on_exit() {
     local code=$?
     if [[ "$MODE" == slurm && -n "$jobid" ]]; then
         scancel "$jobid" 2>/dev/null || true
     fi
-
-    local status_line
-    if [[ "$converged" == 1 ]]; then
-        status_line="Converged after $((iter + 1)) run(s). ADM mass=${MASS:-N/A} target=$TARGET_MASS residual=${RESIDUAL:-N/A}"
-    elif [[ $code -eq 2 ]]; then
-        status_line="Did NOT converge within $MAX_ITER iterations. Last ADM mass=${MASS:-N/A} residual=${RESIDUAL:-N/A}"
-    else
-        status_line="Stopped with an error (exit code $code). Check $WORKDIR/progress.log"
-    fi
-
-    send_mail "TwoPunctures ADM tuning finished ($WORKDIR) - exit $code" \
-"$status_line
-Working directory: $(realpath "$WORKDIR" 2>/dev/null || echo "$WORKDIR")
-Host: $(hostname)
-Time: $(date)"
 }
 on_signal() {
     echo "Received SIG$1, cancelling and exiting..." >&2
@@ -364,13 +309,6 @@ on_signal() {
 trap on_exit EXIT
 trap 'on_signal INT' INT
 trap 'on_signal TERM' TERM
-
-send_mail "TwoPunctures ADM tuning started ($WORKDIR)" \
-"Started tuning $PARAM_FILE toward target ADM mass $TARGET_MASS
-Mode: $MODE
-Working directory: $(realpath "$WORKDIR")
-Host: $(hostname)
-Time: $(date)"
 
 # ---------------------------------------------------------------------------
 # Iteration: build one param file for the given alpha/tier and run it

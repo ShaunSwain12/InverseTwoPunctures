@@ -12,10 +12,9 @@
 #SBATCH --cpus-per-task=1
 #! How much wallclock time will be required?
 #SBATCH --time=04:00:00
-#! No per-job email: submit.sh sends exactly one email at campaign start and
-#! one at campaign end (via --mail-user) instead of one per iteration. It
-#! also passes --mail-type=NONE on the sbatch command line, which overrides
-#! this, but set it here too so running this script directly behaves the same.
+#! Never send job email. submit.sh also passes --mail-type=NONE on the sbatch
+#! command line; set it here too so running this script directly behaves the
+#! same.
 #SBATCH --mail-type=NONE
 #! Merge stderr into the stdout log (slurm-%j.out): the standalone prints its
 #! ADM-mass line to stderr, and the tuning driver greps the .out file for it.
